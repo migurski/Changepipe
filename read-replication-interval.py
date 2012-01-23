@@ -51,6 +51,7 @@ for node in nodes:
     node_key = 'node-%(id)s' % node.attrib
     change_key = 'changeset-%(changeset)s' % node.attrib
 
+    pipe.hset(node_key, 'version', node.attrib['version'])
     pipe.hset(node_key, 'lat', node.attrib['lat'])
     pipe.hset(node_key, 'lon', node.attrib['lon'])
     
@@ -67,13 +68,16 @@ for way in ways:
     pipe = redis.pipeline(True)
     way_key = 'way-%(id)s' % way.attrib
     way_nodes_key = way_key + '-nodes'
-    change_key = 'changeset-%(changeset)s' % node.attrib
+    change_key = 'changeset-%(changeset)s' % way.attrib
 
+    pipe.hset(way_key, 'version', way.attrib['version'])
+    
     pipe.delete(way_nodes_key)
     for nd in way.findall('nd'):
         pipe.rpush(way_nodes_key, nd.attrib['ref'])
     
     pipe.sadd(change_key, way_key)
+    pipe.expire(way_key, expiration)
     pipe.expire(way_nodes_key, expiration)
     pipe.expire(change_key, expiration)
     pipe.execute()
@@ -89,11 +93,14 @@ for relation in relations:
     relation_members_key = relation_key + '-members'
     change_key = 'changeset-%(changeset)s' % relation.attrib
 
+    pipe.hset(relation_key, 'version', relation.attrib['version'])
+    
     pipe.delete(relation_members_key)
     for member in relation.findall('member'):
         pipe.sadd(relation_members_key, '%(type)s-%(ref)s' % member.attrib)
 
     pipe.sadd(change_key, relation_key)
+    pipe.expire(relation_key, expiration)
     pipe.expire(relation_members_key, expiration)
     pipe.expire(change_key, expiration)
     pipe.execute()
