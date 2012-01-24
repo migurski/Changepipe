@@ -114,6 +114,24 @@ for relation in relations:
     pipe.expire(change_key, expiration)
     pipe.execute()
 
+def changeset_bounds(changeset_id):
+    """
+    """
+    
+    # TODO: use redis here but be careful to clean it when new changeset stuff happens
+    
+    url = 'http://api.openstreetmap.org/api/0.6/changeset/%s' % changeset_id
+    print >> stderr, url
+    
+    xml = parse(urlopen(url))
+    change = xml.find('changeset')
+    
+    if 'min_lat' in change.attrib:
+        minlat, minlon, maxlat, maxlon = [float(change.attrib[a]) for a in 'min_lat min_lon max_lat max_lon'.split()]
+        return Polygon([(minlon, minlat), (minlon, maxlat), (maxlon, maxlat), (maxlon, minlat), (minlon, minlat)])
+    
+    return None
+
 def node_geometry(redis, node_key, ask_osm_api):
     """ Get a point geometry out of a node_key.
     """
@@ -203,6 +221,13 @@ def overlaps(area, changeset_id):
     # check the node and ways twice, once ignoring the OSM API and once asking.
     
     for ask_osm_api in (False, True):
+    
+        if ask_osm_api:
+            # before asking the API about nodes or ways, do a simple bbox check.
+            change_geom = changeset_bounds(changeset_id)
+            
+            if change_geom.disjoint(area):
+                return False
 
         for node_key in sorted(node_keys):
             node_geom = node_geometry(redis, node_key, ask_osm_api)
