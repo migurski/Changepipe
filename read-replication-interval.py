@@ -114,15 +114,26 @@ for relation in relations:
     pipe.expire(change_key, expiration)
     pipe.execute()
 
-def node_geometry(redis, node_key):
+def node_geometry(redis, node_key, ask_osm_api):
     """ Get a point geometry out of a node_key.
     """
-    lat = float(redis.hget(node_key, 'lat'))
-    lon = float(redis.hget(node_key, 'lon'))
+    lat, lon = redis.hget(node_key, 'lat'), redis.hget(node_key, 'lon')
+    
+    if ask_osm_api and (lat is None or lon is None):
+        url = 'http://api.openstreetmap.org/api/0.6/node/%s' % node_key[5:]
+        print >> stderr, url
 
-    return Point(lon, lat)
+        xml = parse(urlopen(url))
+        node = xml.find('node')
+        lat, lon = node.attrib['lat'], node.attrib['lon']
+        remember_node(redis, node.attrib)
+    
+    if lat is None or lon is None:
+        return None
+    
+    return Point(float(lon), float(lat))
 
-def way_geometry(redis, way_nodes_key):
+def way_geometry(redis, way_nodes_key, ask_osm_api):
     """ Get a multipoint geometry for all the nodes of a way that we know.
     """
     node_ids = redis.lrange(way_nodes_key, 0, redis.llen(way_nodes_key))
@@ -133,9 +144,9 @@ def way_geometry(redis, way_nodes_key):
                    if redis.exists(node_key)]
     
     # We only care about some of the nodes for a good-enough geometry
-    needed = lambda nodes: len(nodes) / 3
+    needed = lambda things: len(things) / 3
     
-    if len(way_latlons) <= 1 or len(way_latlons) < needed(node_keys):
+    if ask_osm_api and (len(way_latlons) <= 1 or len(way_latlons) < needed(node_keys)):
         #
         # Too short, because we don't know enough. Ask OSM.
         #
@@ -171,31 +182,56 @@ def way_geometry(redis, way_nodes_key):
             way_latlons.append((float(node.attrib['lat']), float(node.attrib['lon'])))
             remember_node(redis, node.attrib)
 
+    if len(way_latlons) == 0:
+        return None
+    
     return MultiPoint([(lon, lat) for (lat, lon) in way_latlons])
 
-def intersects(area, changeset_id):
-    """
+def overlaps(area, changeset_id):
+    """ Return true if an area and a changeset overlap.
     """
     change_key = 'changeset-' + changeset_id
     
-    for object_key in sorted(redis.smembers(change_key)):
-        if object_key.startswith('node-'):
-            node_key = object_key
-            node_geom = node_geometry(redis, node_key)
-            
-            if node_geom.intersects(bbox):
-                return True
+    object_keys = redis.smembers(change_key)
+    node_keys = [key for key in object_keys if key.startswith('node-')]
+    way_keys = [key for key in object_keys if key.startswith('way-')]
+    rel_keys = [key for key in object_keys if key.startswith('relation-')]
+    
+    # check the nodes and ways, without talking to the API.
+    
+    for node_key in sorted(node_keys):
+        node_geom = node_geometry(redis, node_key, False)
+    
+        if node_geom and node_geom.intersects(area):
+            return True
+    
+    for way_key in sorted(way_keys):
+        way_nodes_key = way_key + '-nodes'
+        way_geom = way_geometry(redis, way_nodes_key, False)
         
-        if object_key.startswith('way-'):
-            way_nodes_key = object_key + '-nodes'
-            way_geom = way_geometry(redis, way_nodes_key)
-            
-            if way_geom and way_geom.intersects(bbox):
-                return True
+        if way_geom and way_geom.intersects(area):
+            return True
+    
+    # check the node and ways again, but ask for additional info from the API.
+    
+    for node_key in sorted(node_keys):
+        node_geom = node_geometry(redis, node_key, True)
+    
+        if node_geom and node_geom.intersects(area):
+            return True
+    
+    for way_key in sorted(way_keys):
+        way_nodes_key = way_key + '-nodes'
+        way_geom = way_geometry(redis, way_nodes_key, True)
         
-        if object_key.startswith('relation-'):
-            relation_members_key = object_key + '-members'
-            #print change_key, relation_members_key, redis.smembers(relation_members_key)
+        if way_geom and way_geom.intersects(area):
+            return True
+    
+    # TODO: check the relations as well.
+    
+    for relation_key in sorted(rel_keys):
+        relation_members_key = relation_key + '-members'
+        #print change_key, relation_members_key, redis.smembers(relation_members_key)
     
     return False
 
@@ -205,5 +241,7 @@ usa = Polygon([(-125.0, 49.4), (-125.0, 24.7), (-66.8, 24.7), (-66.8, 49.4), (-1
 bbox = germany
 
 for changeset_id in sorted(changesets):
-    if intersects(bbox, changeset_id):
+    if overlaps(bbox, changeset_id):
         print 'changeset/' + changeset_id
+    else:
+        print 'x', changeset_id
