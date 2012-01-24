@@ -27,6 +27,17 @@ changesets = set( [el.attrib['changeset'] for el in elements] )
 
 redis = StrictRedis()
 
+for changeset_id in sorted(changesets):
+    #
+    # Delete saved changeset bounding boxes, because they've probably changed.
+    #
+    changeset_key = 'changeset-' + changeset_id
+
+    redis.hdel(changeset_key, 'min_lat')
+    redis.hdel(changeset_key, 'min_lon')
+    redis.hdel(changeset_key, 'max_lat')
+    redis.hdel(changeset_key, 'max_lon')
+
 for node in nodes:
     #
     # Save nodes to redis hashes under "node-id" keys, with keys "lat", "lon".
@@ -34,12 +45,12 @@ for node in nodes:
     #
     pipe = redis.pipeline(True)
     node_key = 'node-%(id)s' % node.attrib
-    change_key = 'changeset-%(changeset)s' % node.attrib
+    change_items_key = 'changeset-%(changeset)s-items' % node.attrib
     
     osm.remember_node(pipe, node.attrib)
 
-    pipe.sadd(change_key, node_key)
-    pipe.expire(change_key, osm.expiration)
+    pipe.sadd(change_items_key, node_key)
+    pipe.expire(change_items_key, osm.expiration)
     pipe.execute()
 
 for way in ways:
@@ -50,7 +61,7 @@ for way in ways:
     pipe = redis.pipeline(True)
     way_key = 'way-%(id)s' % way.attrib
     way_nodes_key = way_key + '-nodes'
-    change_key = 'changeset-%(changeset)s' % way.attrib
+    change_items_key = 'changeset-%(changeset)s-items' % way.attrib
 
     pipe.hset(way_key, 'version', way.attrib['version'])
     
@@ -58,10 +69,10 @@ for way in ways:
     for nd in way.findall('nd'):
         pipe.rpush(way_nodes_key, nd.attrib['ref'])
     
-    pipe.sadd(change_key, way_key)
+    pipe.sadd(change_items_key, way_key)
     pipe.expire(way_key, osm.expiration)
     pipe.expire(way_nodes_key, osm.expiration)
-    pipe.expire(change_key, osm.expiration)
+    pipe.expire(change_items_key, osm.expiration)
     pipe.execute()
 
 for relation in relations:
@@ -73,7 +84,7 @@ for relation in relations:
     pipe = redis.pipeline(True)
     relation_key = 'relation-%(id)s' % relation.attrib
     relation_members_key = relation_key + '-members'
-    change_key = 'changeset-%(changeset)s' % relation.attrib
+    change_items_key = 'changeset-%(changeset)s-items' % relation.attrib
 
     pipe.hset(relation_key, 'version', relation.attrib['version'])
     
@@ -81,10 +92,10 @@ for relation in relations:
     for member in relation.findall('member'):
         pipe.sadd(relation_members_key, '%(type)s-%(ref)s' % member.attrib)
 
-    pipe.sadd(change_key, relation_key)
+    pipe.sadd(change_items_key, relation_key)
     pipe.expire(relation_key, osm.expiration)
     pipe.expire(relation_members_key, osm.expiration)
-    pipe.expire(change_key, osm.expiration)
+    pipe.expire(change_items_key, osm.expiration)
     pipe.execute()
 
 germany = Polygon([(5.8, 47.3), (5.8, 55.0), (14.8, 55.0), (14.8, 47.3), (5.8, 47.3)])
@@ -93,7 +104,9 @@ usa = Polygon([(-125.0, 49.4), (-125.0, 24.7), (-66.8, 24.7), (-66.8, 49.4), (-1
 bbox = usa
 
 for changeset_id in sorted(changesets):
-    if osm.overlaps(redis, bbox, changeset_id):
+    changeset_key = 'changeset-' + changeset_id
+
+    if osm.overlaps(redis, bbox, changeset_key):
         print 'changeset/' + changeset_id
     else:
         print '  not', changeset_id

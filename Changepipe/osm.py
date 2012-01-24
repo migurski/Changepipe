@@ -37,20 +37,31 @@ def remember_node(redis, attrib):
     
     redis.expire(node_key, expiration)
 
-def changeset_bounds(changeset_id):
+def changeset_bounds(redis, changeset_key, ask_osm_api):
     """
     """
+    minlat, minlon, maxlat, maxlon = [redis.hget(changeset_key, a) for a in 'min_lat min_lon max_lat max_lon'.split()]
     
-    # TODO: use redis here but be careful to clean it when new changeset stuff happens
+    if ask_osm_api and (minlat is None or minlon is None or maxlat is None or maxlon is None):
+        xml = api_xml('http://api.openstreetmap.org/api/0.6/changeset/%s' % changeset_key[10:])
+        change = xml.find('changeset')
+        
+        if 'min_lat' in change.attrib:
+            minlat, minlon, maxlat, maxlon = [change.attrib[a] for a in 'min_lat min_lon max_lat max_lon'.split()]
+            
+            redis.hset(changeset_key, 'min_lat', minlat)
+            redis.hset(changeset_key, 'min_lon', minlon)
+            redis.hset(changeset_key, 'max_lat', maxlat)
+            redis.hset(changeset_key, 'max_lon', maxlon)
+            
+            redis.expire(changeset_key, expiration)
     
-    xml = api_xml('http://api.openstreetmap.org/api/0.6/changeset/%s' % changeset_id)
-    change = xml.find('changeset')
+    if minlat is None or minlon is None or maxlat is None or maxlon is None:
+        return None
     
-    if 'min_lat' in change.attrib:
-        minlat, minlon, maxlat, maxlon = [float(change.attrib[a]) for a in 'min_lat min_lon max_lat max_lon'.split()]
-        return Polygon([(minlon, minlat), (minlon, maxlat), (maxlon, maxlat), (maxlon, minlat), (minlon, minlat)])
+    minlat, minlon, maxlat, maxlon = map(float, (minlat, minlon, maxlat, maxlon))
     
-    return None
+    return Polygon([(minlon, minlat), (minlon, maxlat), (maxlon, maxlat), (maxlon, minlat), (minlon, minlat)])
 
 def node_geometry(redis, node_key, ask_osm_api):
     """ Get a point geometry out of a node_key.
@@ -116,13 +127,13 @@ def way_geometry(redis, way_key, ask_osm_api):
     
     return MultiPoint([(lon, lat) for (lat, lon) in way_latlons])
 
-def overlaps(redis, area, changeset_id):
+def overlaps(redis, area, changeset_key):
     """ Return true if an area and a changeset overlap.
     """
     even_close = area.buffer(5, 3) # 5 degrees of lat or lon is really far.
-    change_key = 'changeset-' + changeset_id
+    changeset_items_key = changeset_key + '-items'
     
-    object_keys = redis.smembers(change_key)
+    object_keys = redis.smembers(changeset_items_key)
     node_keys = [key for key in object_keys if key.startswith('node-')]
     way_keys = [key for key in object_keys if key.startswith('way-')]
     rel_keys = [key for key in object_keys if key.startswith('relation-')]
@@ -131,17 +142,15 @@ def overlaps(redis, area, changeset_id):
     
     for ask_osm_api in (False, True):
     
-        if ask_osm_api:
-            # before asking the API about nodes or ways, do a simple bbox check.
-            change_bbox = changeset_bounds(changeset_id)
-            
-            if change_bbox and change_bbox.disjoint(area):
-                # definitely outside
-                return False
-            
-            if change_bbox and change_bbox.within(area):
-                # definitely inside
-                return True
+        change_bbox = changeset_bounds(redis, changeset_key, ask_osm_api)
+        
+        if change_bbox and change_bbox.disjoint(area):
+            # definitely outside
+            return False
+        
+        if change_bbox and change_bbox.within(area):
+            # definitely inside
+            return True
 
         for node_key in sorted(node_keys):
             node_geom = node_geometry(redis, node_key, ask_osm_api)
