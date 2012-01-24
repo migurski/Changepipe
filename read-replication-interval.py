@@ -133,9 +133,11 @@ def node_geometry(redis, node_key, ask_osm_api):
     
     return Point(float(lon), float(lat))
 
-def way_geometry(redis, way_nodes_key, ask_osm_api):
+def way_geometry(redis, way_key, ask_osm_api):
     """ Get a multipoint geometry for all the nodes of a way that we know.
     """
+    way_nodes_key = way_key + '-nodes'
+    
     node_ids = redis.lrange(way_nodes_key, 0, redis.llen(way_nodes_key))
     node_keys = ['node-' + node_id for node_id in node_ids]
 
@@ -152,7 +154,7 @@ def way_geometry(redis, way_nodes_key, ask_osm_api):
         #
         way_latlons = []
         
-        url = 'http://api.openstreetmap.org/api/0.6/way/%s/full' % way_nodes_key[4:-6]
+        url = 'http://api.openstreetmap.org/api/0.6/way/%s/full' % way_key[4:]
         print >> stderr, url
         
         try:
@@ -161,10 +163,10 @@ def way_geometry(redis, way_nodes_key, ask_osm_api):
             
         except ExpatError:
             #
-            # Parse can fail when a way has been deleted.
+            # Parse can fail when a way has been deleted; check its previous version.
             #
-            ver = int(redis.hget(way_nodes_key[:-6], 'version'))
-            url = 'http://api.openstreetmap.org/api/0.6/way/%s/%d' % (way_nodes_key[4:-6], ver - 1)
+            ver = int(redis.hget(way_key, 'version'))
+            url = 'http://api.openstreetmap.org/api/0.6/way/%s/%d' % (way_key[4:], ver - 1)
             print >> stderr, url
 
             xml = parse(urlopen(url))
@@ -190,6 +192,7 @@ def way_geometry(redis, way_nodes_key, ask_osm_api):
 def overlaps(area, changeset_id):
     """ Return true if an area and a changeset overlap.
     """
+    even_close = area.buffer(5, 3) # 5 degrees of lat or lon is really far.
     change_key = 'changeset-' + changeset_id
     
     object_keys = redis.smembers(change_key)
@@ -197,35 +200,31 @@ def overlaps(area, changeset_id):
     way_keys = [key for key in object_keys if key.startswith('way-')]
     rel_keys = [key for key in object_keys if key.startswith('relation-')]
     
-    # check the nodes and ways, without talking to the API.
+    # check the node and ways twice, once ignoring the OSM API and once asking.
     
-    for node_key in sorted(node_keys):
-        node_geom = node_geometry(redis, node_key, False)
-    
-        if node_geom and node_geom.intersects(area):
-            return True
-    
-    for way_key in sorted(way_keys):
-        way_nodes_key = way_key + '-nodes'
-        way_geom = way_geometry(redis, way_nodes_key, False)
+    for ask_osm_api in (False, True):
+
+        for node_key in sorted(node_keys):
+            node_geom = node_geometry(redis, node_key, ask_osm_api)
         
-        if way_geom and way_geom.intersects(area):
-            return True
-    
-    # check the node and ways again, but ask for additional info from the API.
-    
-    for node_key in sorted(node_keys):
-        node_geom = node_geometry(redis, node_key, True)
-    
-        if node_geom and node_geom.intersects(area):
-            return True
-    
-    for way_key in sorted(way_keys):
-        way_nodes_key = way_key + '-nodes'
-        way_geom = way_geometry(redis, way_nodes_key, True)
+            if node_geom and node_geom.intersects(area):
+                return True
+            
+            elif node_geom and not node_geom.within(even_close):
+                # we're so far away that fuckit
+                print >> stderr, 'super-distant', node_key
+                return False
         
-        if way_geom and way_geom.intersects(area):
-            return True
+        for way_key in sorted(way_keys):
+            way_geom = way_geometry(redis, way_key, ask_osm_api)
+            
+            if way_geom and way_geom.intersects(area):
+                return True
+            
+            elif way_geom and not way_geom.within(even_close):
+                # we're so far away that fuckit
+                print >> stderr, 'super-distant', way_key
+                return False
     
     # TODO: check the relations as well.
     
