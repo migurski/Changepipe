@@ -1,10 +1,11 @@
+from sys import stderr
 from subprocess import Popen, PIPE
-from xml.parsers.expat import ParserCreate
+from xml.parsers.expat import ExpatError
 from xml.etree.ElementTree import parse
 from urllib import urlopen
 
 from redis import StrictRedis
-from shapely.geometry import Point, MultiPoint
+from shapely.geometry import Point, MultiPoint, Polygon
 
 expiration = 3600
 
@@ -19,6 +20,17 @@ def changed_elements(stream):
             elements += change.getchildren()
     
     return elements
+
+def remember_node(redis, attrib):
+    """
+    """
+    node_key = 'node-%(id)s' % attrib
+
+    redis.hset(node_key, 'version', attrib['version'])
+    redis.hset(node_key, 'lat', attrib['lat'])
+    redis.hset(node_key, 'lon', attrib['lon'])
+    
+    redis.expire(node_key, expiration)
 
 osmosis = 'osmosis --rri --simc --write-xml-change -'
 osmosis = Popen(osmosis.split(), stdout=PIPE)
@@ -50,13 +62,10 @@ for node in nodes:
     pipe = redis.pipeline(True)
     node_key = 'node-%(id)s' % node.attrib
     change_key = 'changeset-%(changeset)s' % node.attrib
-
-    pipe.hset(node_key, 'version', node.attrib['version'])
-    pipe.hset(node_key, 'lat', node.attrib['lat'])
-    pipe.hset(node_key, 'lon', node.attrib['lon'])
     
+    remember_node(pipe, node.attrib)
+
     pipe.sadd(change_key, node_key)
-    pipe.expire(node_key, expiration)
     pipe.expire(change_key, expiration)
     pipe.execute()
 
@@ -123,25 +132,78 @@ def way_geometry(redis, way_nodes_key):
                    for node_key in node_keys
                    if redis.exists(node_key)]
     
-    if len(way_latlons) <= 1:
-        return None
+    # We only care about some of the nodes for a good-enough geometry
+    needed = lambda nodes: len(nodes) / 3
+    
+    if len(way_latlons) <= 1 or len(way_latlons) < needed(node_keys):
+        #
+        # Too short, because we don't know enough. Ask OSM.
+        #
+        way_latlons = []
+        
+        url = 'http://api.openstreetmap.org/api/0.6/way/%s/full' % way_nodes_key[4:-6]
+        print >> stderr, url
+        
+        try:
+            xml = parse(urlopen(url))
+            nodes = xml.findall('node')
+            
+        except ExpatError:
+            #
+            # Parse can fail when a way has been deleted.
+            #
+            ver = int(redis.hget(way_nodes_key[:-6], 'version'))
+            url = 'http://api.openstreetmap.org/api/0.6/way/%s/%d' % (way_nodes_key[4:-6], ver - 1)
+            print >> stderr, url
+
+            xml = parse(urlopen(url))
+            refs = [nd.attrib['ref'] for nd in xml.find('way').findall('nd')]
+            nodes = []
+            
+            for offset in range(0, needed(refs), 10):
+                url = 'http://api.openstreetmap.org/api/0.6/nodes?nodes=%s' % ','.join(refs[offset:offset+10])
+                print >> stderr, url
+    
+                xml = parse(urlopen(url))
+                nodes += xml.findall('node')
+        
+        for node in nodes:
+            way_latlons.append((float(node.attrib['lat']), float(node.attrib['lon'])))
+            remember_node(redis, node.attrib)
 
     return MultiPoint([(lon, lat) for (lat, lon) in way_latlons])
 
-for changeset in sorted(changesets):
-    
-    change_key = 'changeset-' + changeset
+def intersects(area, changeset_id):
+    """
+    """
+    change_key = 'changeset-' + changeset_id
     
     for object_key in sorted(redis.smembers(change_key)):
         if object_key.startswith('node-'):
             node_key = object_key
-            print change_key, node_key, node_geometry(redis, node_key)
+            node_geom = node_geometry(redis, node_key)
+            
+            if node_geom.intersects(bbox):
+                return True
         
         if object_key.startswith('way-'):
             way_nodes_key = object_key + '-nodes'
-            print change_key, way_nodes_key, way_geometry(redis, way_nodes_key)
+            way_geom = way_geometry(redis, way_nodes_key)
+            
+            if way_geom and way_geom.intersects(bbox):
+                return True
         
         if object_key.startswith('relation-'):
             relation_members_key = object_key + '-members'
-            print change_key, relation_members_key, redis.smembers(relation_members_key)
-            
+            #print change_key, relation_members_key, redis.smembers(relation_members_key)
+    
+    return False
+
+germany = Polygon([(5.8, 47.3), (5.8, 55.0), (14.8, 55.0), (14.8, 47.3), (5.8, 47.3)])
+usa = Polygon([(-125.0, 49.4), (-125.0, 24.7), (-66.8, 24.7), (-66.8, 49.4), (-125.0, 49.4)])
+
+bbox = germany
+
+for changeset_id in sorted(changesets):
+    if intersects(bbox, changeset_id):
+        print 'changeset/' + changeset_id
