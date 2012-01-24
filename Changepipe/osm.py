@@ -7,6 +7,13 @@ from shapely.geometry import Point, MultiPoint, Polygon
 
 expiration = 3600
 
+def api_xml(url):
+    """
+    """
+    print >> stderr, ' ', url
+    
+    return parse(urlopen(url))
+
 def changed_elements(stream):
     """
     """
@@ -36,10 +43,7 @@ def changeset_bounds(changeset_id):
     
     # TODO: use redis here but be careful to clean it when new changeset stuff happens
     
-    url = 'http://api.openstreetmap.org/api/0.6/changeset/%s' % changeset_id
-    print >> stderr, url
-    
-    xml = parse(urlopen(url))
+    xml = api_xml('http://api.openstreetmap.org/api/0.6/changeset/%s' % changeset_id)
     change = xml.find('changeset')
     
     if 'min_lat' in change.attrib:
@@ -54,10 +58,7 @@ def node_geometry(redis, node_key, ask_osm_api):
     lat, lon = redis.hget(node_key, 'lat'), redis.hget(node_key, 'lon')
     
     if ask_osm_api and (lat is None or lon is None):
-        url = 'http://api.openstreetmap.org/api/0.6/node/%s' % node_key[5:]
-        print >> stderr, url
-
-        xml = parse(urlopen(url))
+        xml = api_xml('http://api.openstreetmap.org/api/0.6/node/%s' % node_key[5:])
         node = xml.find('node')
         lat, lon = node.attrib['lat'], node.attrib['lon']
         remember_node(redis, node.attrib)
@@ -88,11 +89,8 @@ def way_geometry(redis, way_key, ask_osm_api):
         #
         way_latlons = []
         
-        url = 'http://api.openstreetmap.org/api/0.6/way/%s/full' % way_key[4:]
-        print >> stderr, url
-        
         try:
-            xml = parse(urlopen(url))
+            xml = api_xml('http://api.openstreetmap.org/api/0.6/way/%s/full' % way_key[4:])
             nodes = xml.findall('node')
             
         except ExpatError:
@@ -100,18 +98,13 @@ def way_geometry(redis, way_key, ask_osm_api):
             # Parse can fail when a way has been deleted; check its previous version.
             #
             ver = int(redis.hget(way_key, 'version'))
-            url = 'http://api.openstreetmap.org/api/0.6/way/%s/%d' % (way_key[4:], ver - 1)
-            print >> stderr, url
+            xml = api_xml('http://api.openstreetmap.org/api/0.6/way/%s/%d' % (way_key[4:], ver - 1))
 
-            xml = parse(urlopen(url))
             refs = [nd.attrib['ref'] for nd in xml.find('way').findall('nd')]
             nodes = []
             
             for offset in range(0, needed(refs), 10):
-                url = 'http://api.openstreetmap.org/api/0.6/nodes?nodes=%s' % ','.join(refs[offset:offset+10])
-                print >> stderr, url
-    
-                xml = parse(urlopen(url))
+                xml = api_xml('http://api.openstreetmap.org/api/0.6/nodes?nodes=%s' % ','.join(refs[offset:offset+10]))
                 nodes += xml.findall('node')
         
         for node in nodes:
@@ -140,10 +133,15 @@ def overlaps(redis, area, changeset_id):
     
         if ask_osm_api:
             # before asking the API about nodes or ways, do a simple bbox check.
-            change_geom = changeset_bounds(changeset_id)
+            change_bbox = changeset_bounds(changeset_id)
             
-            if change_geom.disjoint(area):
+            if change_bbox and change_bbox.disjoint(area):
+                # definitely outside
                 return False
+            
+            if change_bbox and change_bbox.within(area):
+                # definitely inside
+                return True
 
         for node_key in sorted(node_keys):
             node_geom = node_geometry(redis, node_key, ask_osm_api)
@@ -153,7 +151,6 @@ def overlaps(redis, area, changeset_id):
             
             elif node_geom and not node_geom.within(even_close):
                 # we're so far away that fuckit
-                print >> stderr, 'super-distant', node_key
                 return False
         
         for way_key in sorted(way_keys):
@@ -164,7 +161,6 @@ def overlaps(redis, area, changeset_id):
             
             elif way_geom and not way_geom.within(even_close):
                 # we're so far away that fuckit
-                print >> stderr, 'super-distant', way_key
                 return False
     
     # TODO: check the relations as well.

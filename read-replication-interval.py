@@ -90,10 +90,10 @@ for relation in relations:
 germany = Polygon([(5.8, 47.3), (5.8, 55.0), (14.8, 55.0), (14.8, 47.3), (5.8, 47.3)])
 usa = Polygon([(-125.0, 49.4), (-125.0, 24.7), (-66.8, 24.7), (-66.8, 49.4), (-125.0, 49.4)])
 
-bbox = germany
+bbox = usa
 
 for changeset_id in sorted(changesets):
     if osm.overlaps(redis, bbox, changeset_id):
         print 'changeset/' + changeset_id
     else:
-        print 'x', changeset_id
+        print '  not', changeset_id
