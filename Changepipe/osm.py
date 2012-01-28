@@ -5,7 +5,7 @@ from urllib import urlopen
 
 from shapely.geometry import Point, MultiPoint, Polygon
 
-expiration = 3600
+expiration = 86400
 
 def api_xml(url):
     """
@@ -47,6 +47,7 @@ def remember_changeset(redis, attrib):
     redis.hset(changeset_key, 'max_lat', attrib['max_lat'])
     redis.hset(changeset_key, 'max_lon', attrib['max_lon'])
     redis.hset(changeset_key, 'user', attrib['user'])
+    redis.hset(changeset_key, 'created_at', attrib['created_at'])
     
     redis.expire(changeset_key, expiration)
 
@@ -134,6 +135,23 @@ def way_geometry(redis, way_key, ask_osm_api):
         return None
     
     return MultiPoint([(lon, lat) for (lat, lon) in way_latlons])
+
+def changeset_information(redis, changeset_key):
+    """
+    """
+    user = redis.hget(changeset_key, 'user')
+    created = redis.hget(changeset_key, 'created_at')
+    
+    if user is None or created is None:
+        xml = api_xml('http://api.openstreetmap.org/api/0.6/changeset/%s' % changeset_key[10:])
+        change = xml.find('changeset')
+        
+        if 'user' in change.attrib:
+            remember_changeset(redis, change.attrib)
+            user = redis.hget(changeset_key, 'user')
+            created = redis.hget(changeset_key, 'created_at')
+    
+    return user, created, changeset_key[10:]
 
 def overlaps(redis, area, changeset_key):
     """ Return true if an area and a changeset overlap.
