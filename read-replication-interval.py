@@ -168,11 +168,12 @@ for (name, geom) in places:
         change_href = 'http://www.openstreetmap.org/browse/changeset/%s' % quote(changeset_id)
         
         print >> feed, '<entry>'
-        print >> feed, '<title>Changeset %s</title>' % changeset_id
-        print >> feed, '<updated>%s</updated>' % created
-        print >> feed, '<author><name>%s</name><uri>%s</uri></author>' % (user, user_href)
-        print >> feed, '<link href="%s"/>' % change_href
-        print >> feed, '<id>%s</id>' % change_href
+        print >> feed, '<title>Changeset %(changeset_id)s</title>' % locals()
+        print >> feed, '<updated>%(created)s</updated>' % locals()
+        print >> feed, '<content type="html"><a href="%(user_href)s">%(user)s</a> edited OpenStreetMap in <a href="%(change_href)s">changeset %(changeset_id)s</a>.</content>' % locals()
+        print >> feed, '<author><name>%(user)s</name><uri>%(user_href)s</uri></author>' % locals()
+        print >> feed, '<link href="%(change_href)s"/>' % locals()
+        print >> feed, '<id>%(change_href)s</id>' % locals()
         print >> feed, '</entry>'
 
     print >> feed, '</feed>'
