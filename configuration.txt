@@ -3,5 +3,5 @@ baseUrl=http://planet.openstreetmap.org/minute-replicate
 
 # Defines the maximum time interval in seconds to download in a single invocation.
 # Setting to 0 disables this feature.
-maxInterval = 3600
+maxInterval = 600
 
