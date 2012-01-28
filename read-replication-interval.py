@@ -1,6 +1,11 @@
+from sys import argv
 from subprocess import Popen, PIPE
+from operator import itemgetter
+from StringIO import StringIO
+from urllib import quote
 
 from redis import StrictRedis
+from boto.s3.connection import S3Connection
 from shapely.geometry import Polygon
 from shapely import wkt
 
@@ -102,9 +107,65 @@ for relation in relations:
     pipe.expire(change_items_key, osm.expiration)
     pipe.execute()
 
+access, secret, bucket = argv[1:]
+bucket = S3Connection(access, secret).get_bucket(bucket)
+keys = dict()
+
+for (name, geom) in places:
+    keys[name] = bucket.new_key('%s.xml' % name)
+
 for changeset_id in sorted(changesets):
     changeset_key = 'changeset-' + changeset_id
     
     for (name, geom) in places:
+        place_changesets_key = 'place-' + name + '-changesets'
+    
         if osm.overlaps(redis, geom, changeset_key):
-            print 'changeset/' + changeset_id, 'by', redis.hget(changeset_key, 'user'), 'in', name
+            user, created, changeset_id = osm.changeset_information(redis, changeset_key)
+            print 'changeset/' + changeset_id, 'by', user, 'in', name, 'at', created
+            
+            redis.sadd(place_changesets_key, changeset_key)
+        
+        else:
+            print '  not', changeset_id
+
+for (name, geom) in places:
+    place_changesets_key = 'place-' + name + '-changesets'
+    
+    change_keys = redis.smembers(place_changesets_key)
+    changesets = [osm.changeset_information(redis, changeset_key) for changeset_key in change_keys]
+    changesets.sort(key=itemgetter(1), reverse=True)
+    changesets = changesets[:25]
+    
+    pipe = redis.pipeline(True)
+    pipe.delete(place_changesets_key)
+    
+    for (user, created, changeset_id) in changesets:
+        pipe.sadd(place_changesets_key, 'changeset-' + changeset_id)
+    
+    pipe.execute()
+
+    feed = StringIO()
+    
+    print >> feed, '<?xml version="1.0" encoding="utf-8"?>'
+    print >> feed, '<feed xmlns="http://www.w3.org/2005/Atom">'
+    print >> feed, '<title type="text">%(name)s</title>' % locals()
+    
+    for (user, created, changeset_id) in changesets:
+        user_href = 'http://www.openstreetmap.org/user/%s' % quote(user)
+        change_href = 'http://www.openstreetmap.org/browse/changeset/%s' % quote(changeset_id)
+        
+        print >> feed, '<entry>'
+        print >> feed, '<title>Changeset %s</title>' % changeset_id
+        print >> feed, '<updated>%s</updated>' % created
+        print >> feed, '<author><name>%s</name><uri>%s</uri></author>' % (user, user_href)
+        print >> feed, '<link href="%s"/>' % change_href
+        print >> feed, '<id>%s</id>' % change_href
+        print >> feed, '</entry>'
+
+    print >> feed, '</feed>'
+    
+    listing = bucket.new_key(name + '.xml')
+    listing.set_contents_from_string(feed.getvalue(), headers={'Content-Type': 'application/atom+xml'}, policy='public-read')
+    
+    print listing
