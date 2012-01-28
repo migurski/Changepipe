@@ -37,6 +37,19 @@ def remember_node(redis, attrib):
     
     redis.expire(node_key, expiration)
 
+def remember_changeset(redis, attrib):
+    """
+    """
+    changeset_key = 'changeset-%(id)s' % attrib
+
+    redis.hset(changeset_key, 'min_lat', attrib['min_lat'])
+    redis.hset(changeset_key, 'min_lon', attrib['min_lon'])
+    redis.hset(changeset_key, 'max_lat', attrib['max_lat'])
+    redis.hset(changeset_key, 'max_lon', attrib['max_lon'])
+    redis.hset(changeset_key, 'user', attrib['user'])
+    
+    redis.expire(changeset_key, expiration)
+
 def changeset_bounds(redis, changeset_key, ask_osm_api):
     """
     """
@@ -47,14 +60,9 @@ def changeset_bounds(redis, changeset_key, ask_osm_api):
         change = xml.find('changeset')
         
         if 'min_lat' in change.attrib:
-            minlat, minlon, maxlat, maxlon = [change.attrib[a] for a in 'min_lat min_lon max_lat max_lon'.split()]
-            
-            redis.hset(changeset_key, 'min_lat', minlat)
-            redis.hset(changeset_key, 'min_lon', minlon)
-            redis.hset(changeset_key, 'max_lat', maxlat)
-            redis.hset(changeset_key, 'max_lon', maxlon)
-            
-            redis.expire(changeset_key, expiration)
+            remember_changeset(redis, change.attrib)
+            minlat, minlon = redis.hget(changeset_key, 'min_lat'), redis.hget(changeset_key, 'min_lon')
+            maxlat, maxlon = redis.hget(changeset_key, 'max_lat'), redis.hget(changeset_key, 'max_lon')
     
     if minlat is None or minlon is None or maxlat is None or maxlon is None:
         return None

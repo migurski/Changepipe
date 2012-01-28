@@ -107,6 +107,6 @@ for changeset_id in sorted(changesets):
     changeset_key = 'changeset-' + changeset_id
 
     if osm.overlaps(redis, bbox, changeset_key):
-        print 'changeset/' + changeset_id
+        print 'changeset/' + changeset_id, 'by', redis.hget(changeset_key, 'user')
     else:
         print '  not', changeset_id
