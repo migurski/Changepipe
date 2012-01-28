@@ -2,8 +2,12 @@ from subprocess import Popen, PIPE
 
 from redis import StrictRedis
 from shapely.geometry import Polygon
+from shapely import wkt
 
 from Changepipe import osm
+
+places = [line.split('\t', 1) for line in open('places.txt', 'r')]
+places = [(name, wkt.loads(geom)) for (name, geom) in places]
 
 osmosis = 'osmosis --rri --simc --write-xml-change -'
 osmosis = Popen(osmosis.split(), stdout=PIPE)
@@ -98,15 +102,9 @@ for relation in relations:
     pipe.expire(change_items_key, osm.expiration)
     pipe.execute()
 
-germany = Polygon([(5.8, 47.3), (5.8, 55.0), (14.8, 55.0), (14.8, 47.3), (5.8, 47.3)])
-usa = Polygon([(-125.0, 49.4), (-125.0, 24.7), (-66.8, 24.7), (-66.8, 49.4), (-125.0, 49.4)])
-
-bbox = usa
-
 for changeset_id in sorted(changesets):
     changeset_key = 'changeset-' + changeset_id
-
-    if osm.overlaps(redis, bbox, changeset_key):
-        print 'changeset/' + changeset_id, 'by', redis.hget(changeset_key, 'user')
-    else:
-        print '  not', changeset_id
+    
+    for (name, geom) in places:
+        if osm.overlaps(redis, geom, changeset_key):
+            print 'changeset/' + changeset_id, 'by', redis.hget(changeset_key, 'user'), 'in', name
