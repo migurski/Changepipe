@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>Modify Feature</title>
+    <link rel="stylesheet" href="http://openlayers.org/dev/theme/default/style.css" type="text/css">
+    <link rel="stylesheet" href="http://openlayers.org/dev/examples/style.css" type="text/css">
+    <style type="text/css">
+        #controls {
+            width: 512px;
+        }
+        #controlToggle {
+            padding-left: 1em;
+        }
+        #controlToggle li {
+            list-style: none;
+        }
+    </style>
+    <!--
+    <script src="http://openlayers.org/dev/OpenLayers.js"></script>
+    -->
+    <script src="OpenLayers.js"></script>
+    <script type="text/javascript">
+        var map, vectors, polygon, modify;
+        function init(){
+            map = new OpenLayers.Map('map');
+            var wms = new OpenLayers.Layer.WMS( "OpenLayers WMS", 
+                "http://vmap0.tiles.osgeo.org/wms/vmap0?", {layers: 'basic'}); 
+            OpenLayers.Feature.Vector.style['default']['strokeWidth'] = '2';
+
+            // allow testing of specific renderers via "?renderer=Canvas", etc
+            var renderer = OpenLayers.Util.getParameters(window.location.href).renderer;
+            renderer = (renderer) ? [renderer] : OpenLayers.Layer.Vector.prototype.renderers;
+
+            vectors = new OpenLayers.Layer.Vector("Vector Layer", {
+                renderers: renderer
+            });
+
+            map.addLayers([wms, vectors]);
+            map.addControl(new OpenLayers.Control.MousePosition());
+            
+            if (console && console.log) {
+                function report(event) {
+                    modify.activate();
+                    polygon.deactivate();
+                    console.log([event.type, event.feature, event.feature.geometry.CLASS_NAME]);
+                }
+                vectors.events.on({
+                    "featuremodified": report,
+                    "afterfeaturemodified": report,
+                    "sketchcomplete": report
+                });
+            }
+
+            polygon = new OpenLayers.Control.DrawFeature(vectors, OpenLayers.Handler.Polygon)
+            map.addControl(polygon);
+            
+            modify = new OpenLayers.Control.ModifyFeature(vectors);
+            map.addControl(modify);
+            modify.activate();
+            
+            map.setCenter(new OpenLayers.LonLat(0, 0), 3);
+            document.getElementById('noneToggle').checked = true;
+        }
+        
+        function update() {
+            // reset modification mode
+            controls.modify.mode = OpenLayers.Control.ModifyFeature.RESHAPE;
+
+            var sides = parseInt(document.getElementById("sides").value);
+            sides = Math.max(3, isNaN(sides) ? 0 : sides);
+            controls.regular.handler.sides = sides;
+            var irregular =  document.getElementById("irregular").checked;
+            controls.regular.handler.irregular = irregular;
+        }
+
+        function toggleControl(element)
+        {
+            if(element.value == 'polygon') {
+                polygon.activate();
+                modify.deactivate();
+            
+            } else if(element.value == 'modify') {
+                modify.activate();
+                polygon.deactivate();
+            }
+        }
+        
+    </script>
+  </head>
+  <body onload="init()">
+    <h1 id="title">OpenLayers Modify Feature Example</h1>
+    <div id="tags">
+        vertices, digitizing, draw, drawing
+    </div>
+    <div id="shortdesc">A demonstration of the ModifyFeature control for editing vector features.</div>
+    <div id="map" class="smallmap"></div>
+    <div id="controls">
+        <ul id="controlToggle">
+            <li>
+                <input type="radio" name="type" value="polygon" id="polygonToggle" onclick="toggleControl(this);" />
+                <label for="polygonToggle">draw polygon</label>
+            </li>
+            <li>
+                <input type="radio" name="type" value="modify" id="modifyToggle"
+                       onclick="toggleControl(this);" checked="checked" />
+                <label for="modifyToggle">modify feature</label>
+            </li>
+        </ul>
+    </div>
+  </body>
+</html>
