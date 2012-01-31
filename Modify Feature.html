@@ -7,6 +7,11 @@
     <title>Modify Feature</title>
     <link rel="stylesheet" href="http://js.mapbox.com/theme/dark.css" type="text/css">
     <style type="text/css">
+    
+        body, button
+        {
+            font-family: Arial, Helvetica, sans-serif;
+        }
 
         #map
         {
@@ -15,13 +20,18 @@
             height: 500px;
         }
         
+        #multipolygon
+        {
+            width: 900px;
+        }
+        
         .olControlAttribution
         {
             bottom: 1px;
             left: 1px;
         }
         
-        button
+        button#add-polygon
         {
             cursor: pointer;
             position: absolute;
@@ -60,9 +70,9 @@
             map.addControl(new OpenLayers.Control.MousePosition());
             
             vectors.events.on({
-                "featuremodified": finishDrawing,
                 "afterfeaturemodified": finishDrawing,
-                "sketchcomplete": finishDrawing
+                "featuremodified": finishDrawing,
+                "featureadded": finishDrawing
             });
 
             polygon = new OpenLayers.Control.DrawFeature(vectors, OpenLayers.Handler.Polygon)
@@ -75,25 +85,61 @@
             map.setCenter(new OpenLayers.LonLat(0, 0), 2);
         }
         
-        function drawPolygon()
+        function addPolygon()
         {
             modify.deactivate();
             polygon.activate();
         }
         
-        function finishDrawing()
+        function addedPolygon(e)
+        {
+            console.log(['uh', vectors.features, e]);
+            finishDrawing(e);
+        }
+        
+        function finishDrawing(e)
         {
             polygon.deactivate();
             modify.activate();
+            
+            document.getElementById('multipolygon').innerText = featuresWKT(vectors.features);
+        }
+        
+        function featuresWKT(features)
+        {
+            var rings = [];
+        
+            for(var i in features)
+            {
+                var geometry = vectors.features[i].geometry;
+
+                if(geometry.CLASS_NAME == 'OpenLayers.Geometry.Polygon')
+                {
+                    var ring = geometry.components[0],
+                        pt = undefined,
+                        points = [];
+                    
+                    for(var j in ring.components)
+                    {
+                        pt = geometry.components[0].components[j];
+                        pt = OpenLayers.Projection.transform({x: pt.x, y: pt.y}, merc, lonlat);
+                        points.push(pt.x.toFixed(3) + ' ' + pt.y.toFixed(3));
+                    }
+                    
+                    rings.push('((' + points.join(', ') + '))');
+                }
+            }
+            
+            return 'MULTIPOLYGON (' + rings.join(', ') + ')';
         }
         
     </script>
   </head>
   <body onload="init()">
     <div id="map">
-        <button onclick="drawPolygon();">Polygon</button>
+        <button id="add-polygon" onclick="addPolygon();">Polygon</button>
     </div>
-    <div id="controls">
+    <div id="multipolygon">
     </div>
   </body>
 </html>
