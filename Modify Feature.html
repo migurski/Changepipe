@@ -24,35 +24,24 @@
     <script src="OpenLayers.js"></script>
     <script type="text/javascript">
         var map, vectors, polygon, modify;
-        function init(){
+        OpenLayers.ImgPath = "http://js.mapbox.com/theme/dark/";
+        function init()
+        {
             map = new OpenLayers.Map('map');
             var wms = new OpenLayers.Layer.WMS( "OpenLayers WMS", 
                 "http://vmap0.tiles.osgeo.org/wms/vmap0?", {layers: 'basic'}); 
             OpenLayers.Feature.Vector.style['default']['strokeWidth'] = '2';
 
-            // allow testing of specific renderers via "?renderer=Canvas", etc
-            var renderer = OpenLayers.Util.getParameters(window.location.href).renderer;
-            renderer = (renderer) ? [renderer] : OpenLayers.Layer.Vector.prototype.renderers;
-
-            vectors = new OpenLayers.Layer.Vector("Vector Layer", {
-                renderers: renderer
-            });
+            vectors = new OpenLayers.Layer.Vector("Vector Layer", { renderers: ['Canvas', 'SVG', 'VML'] });
 
             map.addLayers([wms, vectors]);
             map.addControl(new OpenLayers.Control.MousePosition());
             
-            if (console && console.log) {
-                function report(event) {
-                    modify.activate();
-                    polygon.deactivate();
-                    console.log([event.type, event.feature, event.feature.geometry.CLASS_NAME]);
-                }
-                vectors.events.on({
-                    "featuremodified": report,
-                    "afterfeaturemodified": report,
-                    "sketchcomplete": report
-                });
-            }
+            vectors.events.on({
+                "featuremodified": finishDrawing,
+                "afterfeaturemodified": finishDrawing,
+                "sketchcomplete": finishDrawing
+            });
 
             polygon = new OpenLayers.Control.DrawFeature(vectors, OpenLayers.Handler.Polygon)
             map.addControl(polygon);
@@ -62,30 +51,18 @@
             modify.activate();
             
             map.setCenter(new OpenLayers.LonLat(0, 0), 3);
-            document.getElementById('noneToggle').checked = true;
         }
         
-        function update() {
-            // reset modification mode
-            controls.modify.mode = OpenLayers.Control.ModifyFeature.RESHAPE;
-
-            var sides = parseInt(document.getElementById("sides").value);
-            sides = Math.max(3, isNaN(sides) ? 0 : sides);
-            controls.regular.handler.sides = sides;
-            var irregular =  document.getElementById("irregular").checked;
-            controls.regular.handler.irregular = irregular;
-        }
-
-        function toggleControl(element)
+        function drawPolygon()
         {
-            if(element.value == 'polygon') {
-                polygon.activate();
-                modify.deactivate();
-            
-            } else if(element.value == 'modify') {
-                modify.activate();
-                polygon.deactivate();
-            }
+            modify.deactivate();
+            polygon.activate();
+        }
+        
+        function finishDrawing()
+        {
+            polygon.deactivate();
+            modify.activate();
         }
         
     </script>
@@ -98,17 +75,7 @@
     <div id="shortdesc">A demonstration of the ModifyFeature control for editing vector features.</div>
     <div id="map" class="smallmap"></div>
     <div id="controls">
-        <ul id="controlToggle">
-            <li>
-                <input type="radio" name="type" value="polygon" id="polygonToggle" onclick="toggleControl(this);" />
-                <label for="polygonToggle">draw polygon</label>
-            </li>
-            <li>
-                <input type="radio" name="type" value="modify" id="modifyToggle"
-                       onclick="toggleControl(this);" checked="checked" />
-                <label for="modifyToggle">modify feature</label>
-            </li>
-        </ul>
+        <button onclick="drawPolygon();">Polygon</button>
     </div>
   </body>
 </html>
