@@ -5,18 +5,36 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <title>Modify Feature</title>
-    <link rel="stylesheet" href="http://openlayers.org/dev/theme/default/style.css" type="text/css">
-    <link rel="stylesheet" href="http://openlayers.org/dev/examples/style.css" type="text/css">
+    <link rel="stylesheet" href="http://js.mapbox.com/theme/dark.css" type="text/css">
     <style type="text/css">
-        #controls {
-            width: 512px;
+
+        #map
+        {
+            position: relative;
+            width: 900px;
+            height: 500px;
         }
-        #controlToggle {
-            padding-left: 1em;
+        
+        .olControlAttribution
+        {
+            bottom: 1px;
+            left: 1px;
         }
-        #controlToggle li {
-            list-style: none;
+        
+        button
+        {
+            cursor: pointer;
+            position: absolute;
+            z-index: 999;
+            top: 12px;
+            right: 6px;
+            background-color: rgba(0, 0, 0, 0.75);
+            border-radius: 3px;
+            padding: 4px 8px;
+            border: none;
+            color: white;
         }
+
     </style>
     <!--
     <script src="http://openlayers.org/dev/OpenLayers.js"></script>
@@ -24,17 +42,21 @@
     <script src="OpenLayers.js"></script>
     <script type="text/javascript">
         var map, vectors, polygon, modify;
+        
+        var lonlat = new OpenLayers.Projection('EPSG:4326'),
+            merc = new OpenLayers.Projection('EPSG:900913');
+        
         OpenLayers.ImgPath = "http://js.mapbox.com/theme/dark/";
+
         function init()
         {
-            map = new OpenLayers.Map('map');
-            var wms = new OpenLayers.Layer.WMS( "OpenLayers WMS", 
-                "http://vmap0.tiles.osgeo.org/wms/vmap0?", {layers: 'basic'}); 
+            map = new OpenLayers.Map('map', { displayProjection: lonlat });
+            var osm = new OpenLayers.Layer.OSM('OSM');
             OpenLayers.Feature.Vector.style['default']['strokeWidth'] = '2';
 
             vectors = new OpenLayers.Layer.Vector("Vector Layer", { renderers: ['Canvas', 'SVG', 'VML'] });
 
-            map.addLayers([wms, vectors]);
+            map.addLayers([osm, vectors]);
             map.addControl(new OpenLayers.Control.MousePosition());
             
             vectors.events.on({
@@ -50,7 +72,7 @@
             map.addControl(modify);
             modify.activate();
             
-            map.setCenter(new OpenLayers.LonLat(0, 0), 3);
+            map.setCenter(new OpenLayers.LonLat(0, 0), 2);
         }
         
         function drawPolygon()
@@ -68,14 +90,10 @@
     </script>
   </head>
   <body onload="init()">
-    <h1 id="title">OpenLayers Modify Feature Example</h1>
-    <div id="tags">
-        vertices, digitizing, draw, drawing
-    </div>
-    <div id="shortdesc">A demonstration of the ModifyFeature control for editing vector features.</div>
-    <div id="map" class="smallmap"></div>
-    <div id="controls">
+    <div id="map">
         <button onclick="drawPolygon();">Polygon</button>
+    </div>
+    <div id="controls">
     </div>
   </body>
 </html>
