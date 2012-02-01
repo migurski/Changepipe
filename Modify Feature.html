@@ -31,13 +31,17 @@
             left: 1px;
         }
         
-        button#add-polygon
+        #buttons
         {
-            cursor: pointer;
             position: absolute;
             z-index: 999;
             top: 12px;
             right: 6px;
+        }
+        
+        #buttons button
+        {
+            cursor: pointer;
             background-color: rgba(0, 0, 0, 0.75);
             border-radius: 3px;
             padding: 4px 8px;
@@ -85,19 +89,28 @@
             map.setCenter(new OpenLayers.LonLat(0, 0), 2);
         }
         
+        function clearPolygons()
+        {
+            while(vectors.features.length)
+            {
+                vectors.features[0].destroy();
+            }
+            
+            finishDrawing();
+        }
+        
         function addPolygon()
         {
             modify.deactivate();
             polygon.activate();
         }
         
-        function addedPolygon(e)
+        function addedPolygon()
         {
-            console.log(['uh', vectors.features, e]);
-            finishDrawing(e);
+            finishDrawing();
         }
         
-        function finishDrawing(e)
+        function finishDrawing()
         {
             polygon.deactivate();
             modify.activate();
@@ -126,18 +139,29 @@
                         points.push(pt.x.toFixed(3) + ' ' + pt.y.toFixed(3));
                     }
                     
-                    rings.push('((' + points.join(', ') + '))');
+                    rings.push('(' + points.join(', ') + ')');
                 }
             }
             
-            return 'MULTIPOLYGON (' + rings.join(', ') + ')';
+            if(rings.length == 1) {
+                return 'POLYGON ' + rings[0];
+            
+            } else if(rings.length > 1) {
+                return 'MULTIPOLYGON ((' + rings.join(', ') + '))';
+            
+            } else {
+                return '';
+            }
         }
         
     </script>
   </head>
   <body onload="init()">
     <div id="map">
-        <button id="add-polygon" onclick="addPolygon();">Polygon</button>
+        <div id="buttons">
+            <button onclick="addPolygon();">Draw Polygon</button>
+            <button onclick="clearPolygons();">Clear Drawing</button>
+        </div>
     </div>
     <div id="multipolygon">
     </div>
