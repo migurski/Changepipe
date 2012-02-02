@@ -10,19 +10,39 @@
     
         body, button
         {
-            font-family: Arial, Helvetica, sans-serif;
+        	font-family: Arial, Helvetica, sans-serif;
+        	font-size: 14px;
+        	line-height: 18px;
+        }
+        
+        #content
+        {
+            width: 900px;
+            margin: 2em;
+        }
+
+        #content>div, #content>p
+        {
+            margin: 1em 0;
         }
 
         #map
         {
             position: relative;
-            width: 900px;
             height: 500px;
+            border: 1px solid #808080;
         }
         
-        #multipolygon
+        #wkt-display
         {
-            width: 900px;
+            color: #fc0;
+            background-color: #404040;
+            padding: .5em;
+            -o-border-radius: 3px;
+            -ms-border-radius: 3px;
+            -webkit-border-radius: 3px;
+            -moz-border-radius: 3px;
+            border-radius: 3px;
         }
         
         .olControlAttribution
@@ -97,6 +117,7 @@
             }
             
             finishDrawing();
+            document.getElementById('wkt-email').href = 'mailto:mike@stamen.com?subject=' + escape("I don't have a polygon for you but I'm mailing you anyway about Changepipe");
         }
         
         function addPolygon()
@@ -115,7 +136,9 @@
             polygon.deactivate();
             modify.activate();
             
-            document.getElementById('multipolygon').innerText = featuresWKT(vectors.features);
+            var wkt = featuresWKT(vectors.features);
+            document.getElementById('wkt-display').innerText = wkt;
+            document.getElementById('wkt-email').href = 'mailto:mike@stamen.com?subject=' + escape('Make me a changepipe') + '&body='+escape(wkt);
         }
         
         function featuresWKT(features)
@@ -157,13 +180,38 @@
     </script>
   </head>
   <body onload="init()">
-    <div id="map">
-        <div id="buttons">
-            <button onclick="addPolygon();">Draw Polygon</button>
-            <button onclick="clearPolygons();">Clear Drawing</button>
+    <div id="content">
+        <h1>The Changepipe</h1>
+        <p>
+            Get notified via RSS when OpenStreetMap has been edited in your area.
+        </p>
+        <p>
+            Draw a polygon on the map below using the “Draw Polygon” button,
+            and I’ll generate for you an RSS feed of links to changesets
+            <a href="http://osm-changepipe.s3.amazonaws.com/bay-area.xml">like this</a>.
+        </p>
+        <div id="map">
+            <div id="buttons">
+                <button onclick="addPolygon();">Draw Polygon</button>
+                <button onclick="clearPolygons();">Clear Drawing</button>
+            </div>
         </div>
-    </div>
-    <div id="multipolygon">
+        <p id="wkt-display"><span style="color: #999;">Draw something above.</span></p>
+        <p>
+            Things are still fairly primitive around here, so when you’re done drawing
+            an outline around your local area, 
+            <a id="wkt-email" href="mailto:mike@stamen.com">send me an email</a>
+            with the complete contents of the box above, and try not to ask for giant,
+            busy areas like all of Germany or the United States. Changepipe works best
+            for limited areas like single towns or counties, and you can draw more than
+            one area and have that be a single subscription. I’ll mail you back with
+            a URL to your feed that you can subscribe to in a reader or do other
+            things with in services like <a href="http://ifttt.com">If This Then That</a>.
+        </p>
+        <p>
+            A thing by <a href="http://mike.teczno.com">Michal Migurski</a>.
+            Fork me <a href="https://github.com/migurski/Changepipe">on Github</a>.
+        </p>
     </div>
   </body>
 </html>
