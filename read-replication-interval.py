@@ -11,8 +11,13 @@ from shapely import wkt
 
 from Changepipe import osm
 
+# load places file
 places = [line.split('\t', 1) for line in open('places.txt', 'r')]
 places = [(name, wkt.loads(geom)) for (name, geom) in places]
+
+# get Amazon S3 details
+access, secret, bucket = argv[1:]
+bucket = S3Connection(access, secret).get_bucket(bucket)
 
 osmosis = 'osmosis --rri --simc --write-xml-change -'
 osmosis = Popen(osmosis.split(), stdout=PIPE)
@@ -107,8 +112,6 @@ for relation in relations:
     pipe.expire(change_items_key, osm.expiration)
     pipe.execute()
 
-access, secret, bucket = argv[1:]
-bucket = S3Connection(access, secret).get_bucket(bucket)
 keys = dict()
 
 for (name, geom) in places:
@@ -181,4 +184,4 @@ for (name, geom) in places:
     listing = bucket.new_key(name + '.xml')
     listing.set_contents_from_string(feed.getvalue(), headers={'Content-Type': 'application/atom+xml'}, policy='public-read')
     
-    print listing
+    print 'http://%s.s3.amazonaws.com/%s' % (bucket.name, listing.name)
