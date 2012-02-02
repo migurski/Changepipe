@@ -138,7 +138,7 @@
             
             var wkt = featuresWKT(vectors.features);
             document.getElementById('wkt-display').innerText = wkt;
-            document.getElementById('wkt-email').href = 'mailto:mike@stamen.com?subject=' + escape('Make me a changepipe') + '&body='+escape(wkt);
+            document.getElementById('wkt-email').href = 'mailto:mike@stamen.com?subject=' + escape('Sudo make me a changepipe') + '&body='+escape(wkt);
         }
         
         function featuresWKT(features)
@@ -162,15 +162,15 @@
                         points.push(pt.x.toFixed(3) + ' ' + pt.y.toFixed(3));
                     }
                     
-                    rings.push('(' + points.join(', ') + ')');
+                    rings.push('((' + points.join(', ') + '))');
                 }
             }
             
             if(rings.length == 1) {
-                return 'POLYGON (' + rings[0] + ')';
+                return 'POLYGON ' + rings[0];
             
             } else if(rings.length > 1) {
-                return 'MULTIPOLYGON ((' + rings.join(', ') + '))';
+                return 'MULTIPOLYGON (' + rings.join(', ') + ')';
             
             } else {
                 return '';
