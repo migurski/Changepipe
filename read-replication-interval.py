@@ -120,15 +120,18 @@ for (name, geom) in places:
 
 for changeset_id in sorted(changesets):
     changeset_key = 'changeset-' + changeset_id
+    user, created, changeset_id = osm.changeset_information(redis, changeset_key)
     
     for (name, geom) in places:
         place_changesets_key = 'place-' + name + '-changesets'
     
         try:
-            if osm.overlaps(redis, geom, changeset_key):
-                user, created, changeset_id = osm.changeset_information(redis, changeset_key)
+
+            if user == 'xybot':
+                print '  not', changeset_id, 'because xybot'
+
+            elif osm.overlaps(redis, geom, changeset_key):
                 print 'changeset/' + changeset_id, 'by', user, 'in', name, 'at', created
-                
                 redis.sadd(place_changesets_key, changeset_key)
             
             else:
