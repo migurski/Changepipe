@@ -167,7 +167,7 @@
             }
             
             if(rings.length == 1) {
-                return 'POLYGON ' + rings[0];
+                return 'POLYGON (' + rings[0] + ')';
             
             } else if(rings.length > 1) {
                 return 'MULTIPOLYGON ((' + rings.join(', ') + '))';
