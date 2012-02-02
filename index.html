@@ -137,7 +137,7 @@
             modify.activate();
             
             var wkt = featuresWKT(vectors.features);
-            document.getElementById('wkt-display').innerText = wkt;
+            document.getElementById('wkt-display').innerHTML = wkt;
             document.getElementById('wkt-email').href = 'mailto:mike@stamen.com?subject=' + escape('Sudo make me a changepipe') + '&body='+escape(wkt);
         }
         
