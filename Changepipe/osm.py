@@ -42,10 +42,10 @@ def remember_changeset(redis, attrib):
     """
     changeset_key = 'changeset-%(id)s' % attrib
 
-    redis.hset(changeset_key, 'min_lat', attrib['min_lat'])
-    redis.hset(changeset_key, 'min_lon', attrib['min_lon'])
-    redis.hset(changeset_key, 'max_lat', attrib['max_lat'])
-    redis.hset(changeset_key, 'max_lon', attrib['max_lon'])
+    redis.hset(changeset_key, 'min_lat', attrib.get('min_lat', '0'))
+    redis.hset(changeset_key, 'min_lon', attrib.get('min_lon', '0'))
+    redis.hset(changeset_key, 'max_lat', attrib.get('max_lat', '0'))
+    redis.hset(changeset_key, 'max_lon', attrib.get('max_lon', '0'))
     redis.hset(changeset_key, 'user', attrib['user'])
     redis.hset(changeset_key, 'created_at', attrib['created_at'])
     
